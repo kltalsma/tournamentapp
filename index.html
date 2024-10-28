@@ -62,7 +62,7 @@
         <div id="resultsTables"></div>
     </div>
 
-    <div class="real-time-info hidden">
+    <div class="real-time-info" id="liveInfo">
         <h2>Live Toernooi Informatie</h2>
         <div id="standingsTables"></div>
     </div>
@@ -112,70 +112,55 @@
             displayPouleSchedules(numCourts, matchTime);
             displayResults();
             updateStandings();
-
-            // Schedule knockout rounds after pool matches are done
-            if (numPoules > 1) {
-                setTimeout(() => {
-                    generateKnockoutRounds();
-                    displayPouleSchedules(numCourts, matchTime);
-                    displayResults();
-                    updateStandings();
-                }, 500);
-            }
         }
 
         function displayTeamNames() {
             const configurationDiv = document.querySelector('.configuration');
-            configurationDiv.innerHTML += '<h3>Teams</h3>';
+            let teamNamesDiv = document.getElementById('teamNames');
+            if (!teamNamesDiv) {
+                teamNamesDiv = document.createElement('div');
+                teamNamesDiv.id = 'teamNames';
+                configurationDiv.appendChild(teamNamesDiv);
+            }
+            teamNamesDiv.innerHTML = '<h3>Teams</h3>';
             teams.forEach((team, index) => {
-                configurationDiv.innerHTML += `<label for="teamName${index}">Team ${index + 1}:</label>
+                teamNamesDiv.innerHTML += `<label for="teamName${index}">Team ${index + 1}:</label>
                 <input type="text" id="teamName${index}" value="${team}" onchange="updateTeamName(${index})"><br>`;
             });
         }
 
         function updateTeamName(index) {
-            const newName = document.getElementById(`teamName${index}`).value;
-            teams[index] = newName;
-            matches.forEach(match => {
-                if (match.teamA === `Team ${index + 1}`) {
-                    match.teamA = newName;
-                }
-                if (match.teamB === `Team ${index + 1}`) {
-                    match.teamB = newName;
-                }
-            });
-            displayResults();
-            updateStandings();
+    const newName = document.getElementById(`teamName${index}`).value;
+    const oldName = teams[index];
+    teams[index] = newName;
+
+    // Update team names in matches
+    matches.forEach(match => {
+        if (match.teamA === oldName) {
+            match.teamA = newName;
         }
+        if (match.teamB === oldName) {
+            match.teamB = newName;
+        }
+    });
 
-        function generateKnockoutRounds() {
-            // Get the winner from each poule (for simplicity, assume the first team is the winner)
-            const poolWinners = poules.map(poule => poule[0]);
-
-            // Generate knockout matches (quarter-finals, semi-finals, finals)
-            let round = 1;
-            while (poolWinners.length > 1) {
-                let nextRoundWinners = [];
-                for (let i = 0; i < poolWinners.length; i += 2) {
-                    if (i + 1 < poolWinners.length) {
-                        matches.push({
-                            teamA: poolWinners[i],
-                            teamB: poolWinners[i + 1],
-                            poule: `Knockout Round ${round}`,
-                            scoreA: 0,
-                            scoreB: 0
-                        });
-                        nextRoundWinners.push(`Winner of ${poolWinners[i]} vs ${poolWinners[i + 1]}`);
-                    } else {
-                        nextRoundWinners.push(poolWinners[i]);
-                    }
-                }
-                poolWinners = nextRoundWinners;
-                round++;
+    // Update team names in poules
+    poules.forEach(poule => {
+        for (let i = 0; i < poule.length; i++) {
+            if (poule[i] === oldName) {
+                poule[i] = newName;
             }
-
-            isKnockoutRoundsGenerated = true;
         }
+    });
+
+    displayPouleSchedules(parseInt(document.getElementById('numCourts').value), parseInt(document.getElementById('matchTime').value));
+    displayResults();
+    updateStandings();
+
+    // Ensure live info remains visible
+    document.getElementById('liveInfo').classList.remove('hidden');
+}
+
 
         function displayPouleSchedules(numCourts, matchTime) {
             const pouleSchedules = document.getElementById('pouleSchedules');
@@ -410,3 +395,4 @@
     </script>
 </body>
 </html>
+```
