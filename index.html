@@ -390,6 +390,11 @@
             });
 
             document.querySelector('.real-time-info').classList.remove('hidden');
+
+            // Check if all matches are completed and proceed to the knockout stage
+            if (matches.every(match => match.scoreA > 0 || match.scoreB > 0)) {
+                generateQuarterfinals();
+            }
         }
 
         function updateResultsTable() {
