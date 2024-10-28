@@ -23,7 +23,7 @@
         th {
             background-color: #f2f2f2;
         }
-        input[type="number"], input[type="text"] {
+        input[type="number"], input[type="text"], input[type="time"] {
             width: 100px;
             text-align: center;
             background-color: #ffff99;
@@ -48,12 +48,17 @@
         <label for="numCourts">Aantal Velden:</label>
         <input type="number" id="numCourts" min="1" max="5" value="2"><br>
         <label for="matchTime">Tijd per Wedstrijd (minuten):</label>
-        <input type="number" id="matchTime" min="10" max="60" value="40"><br><br>
+        <input type="number" id="matchTime" min="10" max="60" value="40"><br>
+        <label for="startTime">Start Tijd (HH:MM):</label>
+        <input type="time" id="startTime" value="09:00"><br>
+        <label for="tournamentDuration">Toernooi Duur (uren):</label>
+        <input type="number" id="tournamentDuration" min="1" max="12" value="8"><br><br>
         <button onclick="createSchedule()">Maak Schema</button>
     </div>
 
     <div id="pouleSchedules" class="hidden">
         <h2>Wedstrijdschema</h2>
+        <div id="scheduleTable"></div>
     </div>
 
     <div class="results hidden">
@@ -82,12 +87,21 @@
         let knockoutMatches = [];
         let matchId = 0; // Initialize match ID
         let standings = {}; // Global standings object
+        let currentRound = ''; // Track the current knockout round
+        let startTimeInMinutes = 0;
+        let endTimeInMinutes = 0;
 
         function createSchedule() {
             const numTeams = parseInt(document.getElementById('numTeams').value);
             const numPoules = parseInt(document.getElementById('numPoules').value);
             const numCourts = parseInt(document.getElementById('numCourts').value);
             const matchTime = parseInt(document.getElementById('matchTime').value);
+            const startTime = document.getElementById('startTime').value;
+            const tournamentDuration = parseInt(document.getElementById('tournamentDuration').value);
+
+            const [startHours, startMinutes] = startTime.split(':').map(Number);
+            startTimeInMinutes = startHours * 60 + startMinutes;
+            endTimeInMinutes = startTimeInMinutes + tournamentDuration * 60;
 
             teams = [];
             for (let i = 1; i <= numTeams; i++) {
@@ -97,13 +111,13 @@
 
             displayTeamNames();
 
-            // Divide teams into pools
+            // Divide teams into poules
             poules = Array.from({ length: numPoules }, () => []);
             teams.forEach((team, index) => {
                 poules[index % numPoules].push(team);
             });
 
-            // Generate pool matches
+            // Generate poule matches
             matches = [];
             matchId = 0; // Reset match ID
             poules.forEach((poule, pouleIndex) => {
@@ -115,13 +129,14 @@
                             teamB: poule[j],
                             poule: `Poule ${pouleIndex + 1}`,
                             scoreA: 0,
-                            scoreB: 0
+                            scoreB: 0,
+                            completed: false
                         });
                     }
                 }
             });
 
-            displayPouleSchedules(numCourts, matchTime);
+            displayPouleSchedules(numCourts, matchTime, startTimeInMinutes, endTimeInMinutes);
             displayResults();
             updateStandings();
 
@@ -168,7 +183,12 @@
                 }
             });
 
-            displayPouleSchedules(parseInt(document.getElementById('numCourts').value), parseInt(document.getElementById('matchTime').value));
+            displayPouleSchedules(
+                parseInt(document.getElementById('numCourts').value),
+                parseInt(document.getElementById('matchTime').value),
+                startTimeInMinutes,
+                endTimeInMinutes
+            );
             displayResults();
             updateStandings();
 
@@ -176,53 +196,89 @@
             document.getElementById('liveInfo').classList.remove('hidden');
         }
 
-        function displayPouleSchedules(numCourts, matchTime) {
+        function displayPouleSchedules(numCourts, matchTime, startTimeInMinutes, endTimeInMinutes) {
             const pouleSchedules = document.getElementById('pouleSchedules');
-            pouleSchedules.innerHTML = '';
+            const scheduleTableDiv = document.getElementById('scheduleTable');
+            scheduleTableDiv.innerHTML = ''; // Clear previous schedule
+
+            let courtTimes = Array(numCourts).fill(startTimeInMinutes); // Start times for each court
+
+            // Organize matches per poule
+            const matchesPerPoule = poules.map((poule, index) => {
+                return matches.filter(match => match.poule === `Poule ${index + 1}`);
+            });
+
+            // Find the maximum number of matches in any poule
+            const maxMatches = Math.max(...matchesPerPoule.map(matches => matches.length));
+
+            const schedule = []; // This will hold the scheduled matches with time and court
+
+            // Interleave matches from different poules
+            for (let round = 0; round < maxMatches; round++) {
+                for (let pouleIndex = 0; pouleIndex < matchesPerPoule.length; pouleIndex++) {
+                    const pouleMatches = matchesPerPoule[pouleIndex];
+                    if (pouleMatches[round]) {
+                        schedule.push(pouleMatches[round]);
+                    }
+                }
+            }
 
             let matchIndex = 0;
-            let time = 9 * 60; // Starting at 9:00 AM
-            let courtTimes = Array(numCourts).fill(0); // Track the time for each court
 
-            poules.forEach((poule, index) => {
-                const scheduleTable = document.createElement('table');
-                scheduleTable.innerHTML = `
-                    <thead>
-                        <tr>
-                            <th colspan="4">Schema Poule ${index + 1}</th>
-                        </tr>
-                        <tr>
-                            <th>Tijd</th>
-                            <th>Wedstrijd</th>
-                            <th>Veld</th>
-                            <th>Scheidsrechter & Scorekeeper</th>
-                        </tr>
-                    </thead>
-                    <tbody id="scheduleBodyPoule${index}"></tbody>
-                `;
-                pouleSchedules.appendChild(scheduleTable);
+            // Schedule matches
+            schedule.forEach(match => {
+                // Find the court with the earliest available time
+                let earliestCourtTime = Math.min(...courtTimes);
+                let court = courtTimes.indexOf(earliestCourtTime);
 
-                const scheduleBody = scheduleTable.querySelector(`#scheduleBodyPoule${index}`);
+                let matchStartTime = courtTimes[court];
 
-                matches.filter(match => match.poule === `Poule ${index + 1}`).forEach((match, i) => {
-                    let court = courtTimes.indexOf(Math.min(...courtTimes));
-                    courtTimes[court] = time + matchTime;
-                    const hours = Math.floor(time / 60);
-                    const minutes = time % 60;
-                    const timeStr = `${hours}:${minutes < 10 ? '0' : ''}${minutes}`;
-                    const availableTeams = teams.filter(team => team !== match.teamA && team !== match.teamB);
-                    const refereeTeam = availableTeams[(matchIndex + index) % availableTeams.length];
-                    scheduleBody.innerHTML += `
-                        <tr>
-                            <td>${timeStr}</td>
-                            <td>${match.teamA} vs ${match.teamB}</td>
-                            <td>Veld ${court + 1}</td>
-                            <td>${refereeTeam}</td>
-                        </tr>
+                // Check if the match can be scheduled before the end time
+                if (matchStartTime + matchTime > endTimeInMinutes) {
+                    // Cannot schedule this match within the given time frame
+                    alert('Niet alle wedstrijden kunnen binnen de gegeven tijd worden gepland.');
+                    return;
+                }
+
+                // Schedule the match
+                courtTimes[court] += matchTime;
+
+                const hours = Math.floor(matchStartTime / 60);
+                const minutes = matchStartTime % 60;
+                const timeStr = `${hours}:${minutes < 10 ? '0' : ''}${minutes}`;
+
+                const availableTeams = teams.filter(team => team !== match.teamA && team !== match.teamB);
+                const refereeTeam = availableTeams[(matchIndex) % availableTeams.length];
+
+                // Add to the schedule table
+                if (!scheduleTableDiv.querySelector('table')) {
+                    const scheduleTable = document.createElement('table');
+                    scheduleTable.innerHTML = `
+                        <thead>
+                            <tr>
+                                <th>Tijd</th>
+                                <th>Wedstrijd</th>
+                                <th>Poule</th>
+                                <th>Veld</th>
+                                <th>Scheidsrechter & Scorekeeper</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduleBody"></tbody>
                     `;
-                    matchIndex++;
-                    time += matchTime;
-                });
+                    scheduleTableDiv.appendChild(scheduleTable);
+                }
+                const scheduleBody = scheduleTableDiv.querySelector('#scheduleBody');
+                scheduleBody.innerHTML += `
+                    <tr>
+                        <td>${timeStr}</td>
+                        <td>${match.teamA} vs ${match.teamB}</td>
+                        <td>${match.poule}</td>
+                        <td>Veld ${court + 1}</td>
+                        <td>${refereeTeam}</td>
+                    </tr>
+                `;
+
+                matchIndex++;
             });
 
             pouleSchedules.classList.remove('hidden');
@@ -278,8 +334,32 @@
 
             match.scoreA = scoreA;
             match.scoreB = scoreB;
+            match.completed = true;
 
             updateResultsTable();
+        }
+
+        function updateResultsTable() {
+            matches.forEach(match => {
+                const scoreA = parseInt(document.getElementById(`scoreA${match.id}`).value) || 0;
+                const scoreB = parseInt(document.getElementById(`scoreB${match.id}`).value) || 0;
+                match.scoreA = scoreA;
+                match.scoreB = scoreB;
+                match.completed = true;
+                const winnerCell = document.getElementById(`winner${match.id}`);
+
+                // Update winner information based on current scores
+                if (scoreA > scoreB) {
+                    winnerCell.textContent = match.teamA;
+                } else if (scoreB > scoreA) {
+                    winnerCell.textContent = match.teamB;
+                } else if (scoreA === scoreB && scoreA > 0) {
+                    winnerCell.textContent = 'Gelijkspel';
+                } else {
+                    winnerCell.textContent = '';
+                }
+            });
+            updateStandings();
         }
 
         function updateStandings() {
@@ -394,39 +474,22 @@
             document.querySelector('.real-time-info').classList.remove('hidden');
 
             // Check if all matches are completed and proceed to the knockout stage
-            if (matches.every(match => match.scoreA > 0 || match.scoreB > 0)) {
+            if (matches.every(match => match.completed)) {
                 generateQuarterfinals();
             }
-        }
-
-        function updateResultsTable() {
-            matches.forEach(match => {
-                const scoreA = parseInt(document.getElementById(`scoreA${match.id}`).value) || 0;
-                const scoreB = parseInt(document.getElementById(`scoreB${match.id}`).value) || 0;
-                match.scoreA = scoreA;
-                match.scoreB = scoreB;
-                const winnerCell = document.getElementById(`winner${match.id}`);
-
-                // Update winner information based on current scores
-                if (scoreA > scoreB) {
-                    winnerCell.textContent = match.teamA;
-                } else if (scoreB > scoreA) {
-                    winnerCell.textContent = match.teamB;
-                } else if (scoreA === scoreB && scoreA > 0) {
-                    winnerCell.textContent = 'Gelijkspel';
-                } else {
-                    winnerCell.textContent = '';
-                }
-            });
-            updateStandings();
         }
 
         // Knockout Rounds Implementation
         function getAdvancingTeams() {
             const advancingTeams = [];
-            poules.forEach(poule => {
-                const sortedTeams = [...poule].sort((a, b) => standings[b].points - standings[a].points || standings[b].setRatio - standings[a].setRatio);
-                advancingTeams.push(sortedTeams[0], sortedTeams[1]); // Top 2 teams from each pool
+            poules.forEach((poule, index) => {
+                const sortedTeams = [...poule].sort((a, b) => {
+                    if (standings[b].points === standings[a].points) {
+                        return standings[b].setRatio - standings[a].setRatio;
+                    }
+                    return standings[b].points - standings[a].points;
+                });
+                advancingTeams.push(sortedTeams[0], sortedTeams[1]); // Top 2 teams from each poule
             });
             return advancingTeams;
         }
@@ -438,13 +501,15 @@
                 knockoutMatches.push({
                     teamA: advancingTeams[i],
                     teamB: advancingTeams[i + 1],
-                    round: 'Quarterfinal'
+                    round: 'Quarterfinal',
+                    completed: false
                 });
             }
-            displayKnockoutMatches(knockoutMatches, 'quarterfinals', generateSemifinals);
+            currentRound = 'quarterfinals';
+            displayKnockoutMatches(knockoutMatches, currentRound, 'generateSemifinals');
         }
 
-        function displayKnockoutMatches(matches, stageId, nextRoundCallback) {
+        function displayKnockoutMatches(matches, stageId, nextRoundCallbackName) {
             const stageDiv = document.getElementById(stageId);
             stageDiv.innerHTML = ''; // Clear previous content
             matches.forEach((match, index) => {
@@ -453,7 +518,7 @@
                         <h3>${match.round} Match ${index + 1}: ${match.teamA} vs ${match.teamB}</h3>
                         <input type="number" id="scoreA_${stageId}_${index}" placeholder="Score ${match.teamA}">
                         <input type="number" id="scoreB_${stageId}_${index}" placeholder="Score ${match.teamB}">
-                        <button onclick="submitKnockoutScore('${stageId}', ${index}, ${nextRoundCallback ? nextRoundCallback.name : 'null'})">Submit</button>
+                        <button onclick="submitKnockoutScore('${stageId}', ${index}, '${nextRoundCallbackName}')">Submit</button>
                         <div id="winner_${stageId}_${index}"></div>
                     </div>
                 `;
@@ -462,61 +527,67 @@
             document.getElementById('knockoutRounds').classList.remove('hidden');
         }
 
-        function submitKnockoutScore(stageId, matchIndex, nextRoundCallback) {
+        function submitKnockoutScore(stageId, matchIndex, nextRoundCallbackName) {
             const scoreA = parseInt(document.getElementById(`scoreA_${stageId}_${matchIndex}`).value) || 0;
             const scoreB = parseInt(document.getElementById(`scoreB_${stageId}_${matchIndex}`).value) || 0;
             const winnerDiv = document.getElementById(`winner_${stageId}_${matchIndex}`);
-            
+
             let winner;
             if (scoreA > scoreB) {
                 winner = knockoutMatches[matchIndex].teamA;
             } else if (scoreB > scoreA) {
                 winner = knockoutMatches[matchIndex].teamB;
             } else {
-                alert('Tie matches are not allowed in knockout rounds. Please enter a valid score.');
+                alert('Gelijkspel is niet toegestaan in de knockout ronde. Voer een geldige score in.');
                 return;
             }
-            
-            winnerDiv.innerText = `Winner: ${winner}`;
+
+            winnerDiv.innerText = `Winnaar: ${winner}`;
             knockoutMatches[matchIndex].winner = winner;
+            knockoutMatches[matchIndex].completed = true;
 
             // Check if all matches in the round are completed
-            if (knockoutMatches.every(match => match.winner)) {
-                if (nextRoundCallback) {
-                    knockoutMatches = []; // Reset matches for the next round
-                    nextRoundCallback();
+            if (knockoutMatches.every(match => match.completed)) {
+                const previousKnockoutMatches = [...knockoutMatches]; // Keep a copy
+                knockoutMatches = []; // Reset matches for the next round
+                if (nextRoundCallbackName) {
+                    window[nextRoundCallbackName](previousKnockoutMatches);
                 }
             }
         }
 
-        function generateSemifinals() {
-            const semifinalists = knockoutMatches.map(match => match.winner);
+        function generateSemifinals(previousMatches) {
+            const semifinalists = previousMatches.map(match => match.winner);
             knockoutMatches = [];
             for (let i = 0; i < semifinalists.length; i += 2) {
                 knockoutMatches.push({
                     teamA: semifinalists[i],
                     teamB: semifinalists[i + 1],
-                    round: 'Semifinal'
+                    round: 'Semifinal',
+                    completed: false
                 });
             }
-            displayKnockoutMatches(knockoutMatches, 'semifinals', generateFinalAndThirdPlace);
+            currentRound = 'semifinals';
+            displayKnockoutMatches(knockoutMatches, currentRound, 'generateFinalAndThirdPlace');
         }
 
-        function generateFinalAndThirdPlace() {
-            const finalists = knockoutMatches.map(match => match.winner);
-            const losers = knockoutMatches.filter(match => !finalists.includes(match.teamA) || !finalists.includes(match.teamB)).map(match => match.winner === match.teamA ? match.teamB : match.teamA);
+        function generateFinalAndThirdPlace(previousMatches) {
+            const finalists = previousMatches.map(match => match.winner);
+            const losers = previousMatches.map(match => {
+                return match.teamA === match.winner ? match.teamB : match.teamA;
+            });
             knockoutMatches = [
-                { teamA: finalists[0], teamB: finalists[1], round: 'Final' },
-                { teamA: losers[0], teamB: losers[1], round: 'Third Place' }
+                { teamA: finalists[0], teamB: finalists[1], round: 'Final', completed: false },
+                { teamA: losers[0], teamB: losers[1], round: 'Third Place', completed: false }
             ];
-            displayKnockoutMatches(knockoutMatches.slice(0, 1), 'final', displayWinner);
+            displayKnockoutMatches(knockoutMatches.slice(0, 1), 'final', 'displayWinner');
             displayKnockoutMatches(knockoutMatches.slice(1, 2), 'thirdPlace', null);
         }
 
         function displayWinner() {
             const winner = knockoutMatches[0].winner;
             const winnerDiv = document.getElementById('winner');
-            winnerDiv.innerHTML = `<h2>Congratulations to the Tournament Champion: ${winner}!</h2>`;
+            winnerDiv.innerHTML = `<h2>Gefeliciteerd aan de Toernooi Kampioen: ${winner}!</h2>`;
             winnerDiv.classList.remove('hidden');
         }
     </script>
