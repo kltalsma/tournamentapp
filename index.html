@@ -80,6 +80,7 @@
         let poules = [];
         let knockoutMatches = [];
         let matchId = 0; // Initialize match ID
+        let standings = {}; // Global standings object
 
         function createSchedule() {
             const numTeams = parseInt(document.getElementById('numTeams').value);
@@ -281,7 +282,7 @@
         }
 
         function updateStandings() {
-            const standings = {};
+            standings = {}; // Reset standings
             teams.forEach(team => {
                 standings[team] = {
                     matchesPlayed: 0,
@@ -423,7 +424,7 @@
         function getAdvancingTeams() {
             const advancingTeams = [];
             poules.forEach(poule => {
-                const sortedTeams = poule.sort((a, b) => standings[b].points - standings[a].points || standings[b].setRatio - standings[a].setRatio);
+                const sortedTeams = [...poule].sort((a, b) => standings[b].points - standings[a].points || standings[b].setRatio - standings[a].setRatio);
                 advancingTeams.push(sortedTeams[0], sortedTeams[1]); // Top 2 teams from each pool
             });
             return advancingTeams;
@@ -447,7 +448,7 @@
                         <h3>${match.round} Match ${index + 1}: ${match.teamA} vs ${match.teamB}</h3>
                         <input type="number" id="scoreA_${stageId}_${index}" placeholder="Score ${match.teamA}">
                         <input type="number" id="scoreB_${stageId}_${index}" placeholder="Score ${match.teamB}">
-                        <button onclick="submitKnockoutScore('${stageId}', ${index}, ${nextRoundCallback ? 'nextRoundCallback' : 'null'})">Submit</button>
+                        <button onclick="submitKnockoutScore('${stageId}', ${index}, ${nextRoundCallback ? nextRoundCallback.name : 'null'})">Submit</button>
                         <div id="winner_${stageId}_${index}"></div>
                     </div>
                 `;
@@ -476,7 +477,10 @@
 
             // Check if all matches in the round are completed
             if (knockoutMatches.every(match => match.winner)) {
-                nextRoundCallback();
+                if (nextRoundCallback) {
+                    knockoutMatches = []; // Reset matches for the next round
+                    nextRoundCallback();
+                }
             }
         }
 
