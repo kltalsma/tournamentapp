@@ -489,22 +489,62 @@
                     }
                     return standings[b].points - standings[a].points;
                 });
-                advancingTeams.push(sortedTeams[0], sortedTeams[1]); // Top 2 teams from each poule
+                advancingTeams.push({
+                    team: sortedTeams[0],
+                    poule: index,
+                    rank: 1
+                });
+                advancingTeams.push({
+                    team: sortedTeams[1],
+                    poule: index,
+                    rank: 2
+                }); // Top 2 teams from each poule
             });
             return advancingTeams;
         }
 
         function generateQuarterfinals() {
             const advancingTeams = getAdvancingTeams();
+            // Sort advancing teams based on their performance
+            const sortedAdvancingTeams = advancingTeams.sort((a, b) => {
+                if (standings[b.team].points === standings[a.team].points) {
+                    return standings[b.team].setRatio - standings[a.team].setRatio;
+                }
+                return standings[b.team].points - standings[a.team].points;
+            });
+
+            // Determine if byes are needed
+            const totalAdvancingTeams = sortedAdvancingTeams.length;
+            const nextPowerOfTwo = Math.pow(2, Math.ceil(Math.log2(totalAdvancingTeams)));
+            const numByes = nextPowerOfTwo - totalAdvancingTeams;
+
+            // Assign byes to top teams
+            const teamsWithByes = sortedAdvancingTeams.slice(0, numByes).map(entry => entry.team);
+            const teamsWithoutByes = sortedAdvancingTeams.slice(numByes).map(entry => entry.team);
+
             knockoutMatches = [];
-            for (let i = 0; i < advancingTeams.length; i += 2) {
+
+            // Schedule matches for teams without byes
+            for (let i = 0; i < teamsWithoutByes.length; i += 2) {
                 knockoutMatches.push({
-                    teamA: advancingTeams[i],
-                    teamB: advancingTeams[i + 1],
+                    teamA: teamsWithoutByes[i],
+                    teamB: teamsWithoutByes[i + 1],
                     round: 'Quarterfinal',
                     completed: false
                 });
             }
+
+            // Move teams with byes directly to the next round
+            if (teamsWithByes.length > 0) {
+                knockoutMatches.push(...teamsWithByes.map(team => ({
+                    teamA: team,
+                    teamB: null,
+                    round: 'Quarterfinal Bye',
+                    completed: true,
+                    winner: team
+                })));
+            }
+
             currentRound = 'quarterfinals';
             displayKnockoutMatches(knockoutMatches, currentRound, 'generateSemifinals');
         }
@@ -513,15 +553,24 @@
             const stageDiv = document.getElementById(stageId);
             stageDiv.innerHTML = ''; // Clear previous content
             matches.forEach((match, index) => {
-                stageDiv.innerHTML += `
-                    <div>
-                        <h3>${match.round} Match ${index + 1}: ${match.teamA} vs ${match.teamB}</h3>
-                        <input type="number" id="scoreA_${stageId}_${index}" placeholder="Score ${match.teamA}">
-                        <input type="number" id="scoreB_${stageId}_${index}" placeholder="Score ${match.teamB}">
-                        <button onclick="submitKnockoutScore('${stageId}', ${index}, '${nextRoundCallbackName}')">Submit</button>
-                        <div id="winner_${stageId}_${index}"></div>
-                    </div>
-                `;
+                if (match.teamB) {
+                    stageDiv.innerHTML += `
+                        <div>
+                            <h3>${match.round} Match ${index + 1}: ${match.teamA} vs ${match.teamB}</h3>
+                            <input type="number" id="scoreA_${stageId}_${index}" placeholder="Score ${match.teamA}">
+                            <input type="number" id="scoreB_${stageId}_${index}" placeholder="Score ${match.teamB}">
+                            <button onclick="submitKnockoutScore('${stageId}', ${index}, '${nextRoundCallbackName}')">Submit</button>
+                            <div id="winner_${stageId}_${index}"></div>
+                        </div>
+                    `;
+                } else {
+                    stageDiv.innerHTML += `
+                        <div>
+                            <h3>${match.round}: ${match.teamA} krijgt een bye</h3>
+                            <div id="winner_${stageId}_${index}">Winnaar: ${match.teamA}</div>
+                        </div>
+                    `;
+                }
             });
 
             document.getElementById('knockoutRounds').classList.remove('hidden');
@@ -557,35 +606,74 @@
         }
 
         function generateSemifinals(previousMatches) {
-            const semifinalists = previousMatches.map(match => match.winner);
+            const semifinalists = previousMatches.map(match => match.winner).filter(winner => winner !== null);
             knockoutMatches = [];
+
+            // Pair the semifinalists
             for (let i = 0; i < semifinalists.length; i += 2) {
-                knockoutMatches.push({
-                    teamA: semifinalists[i],
-                    teamB: semifinalists[i + 1],
-                    round: 'Semifinal',
-                    completed: false
-                });
+                const teamA = semifinalists[i];
+                const teamB = semifinalists[i + 1] || null;
+
+                if (teamB) {
+                    knockoutMatches.push({
+                        teamA: teamA,
+                        teamB: teamB,
+                        round: 'Semifinal',
+                        completed: false
+                    });
+                } else {
+                    // If there's an odd number of semifinalists, teamA gets a bye to the final
+                    knockoutMatches.push({
+                        teamA: teamA,
+                        teamB: null,
+                        round: 'Semifinal Bye',
+                        completed: true,
+                        winner: teamA
+                    });
+                }
             }
+
             currentRound = 'semifinals';
             displayKnockoutMatches(knockoutMatches, currentRound, 'generateFinalAndThirdPlace');
         }
 
         function generateFinalAndThirdPlace(previousMatches) {
-            const finalists = previousMatches.map(match => match.winner);
+            const finalists = previousMatches.map(match => match.winner).filter(winner => winner !== null);
             const losers = previousMatches.map(match => {
-                return match.teamA === match.winner ? match.teamB : match.teamA;
-            });
-            knockoutMatches = [
-                { teamA: finalists[0], teamB: finalists[1], round: 'Final', completed: false },
-                { teamA: losers[0], teamB: losers[1], round: 'Third Place', completed: false }
-            ];
-            displayKnockoutMatches(knockoutMatches.slice(0, 1), 'final', 'displayWinner');
-            displayKnockoutMatches(knockoutMatches.slice(1, 2), 'thirdPlace', null);
+                if (match.completed && match.teamB !== null) {
+                    return match.teamA === match.winner ? match.teamB : match.teamA;
+                }
+            }).filter(loser => loser !== undefined);
+
+            knockoutMatches = [];
+
+            if (finalists.length === 2) {
+                knockoutMatches.push({ teamA: finalists[0], teamB: finalists[1], round: 'Final', completed: false });
+            } else if (finalists.length === 1) {
+                // If only one finalist (due to byes), they automatically win
+                const winnerDiv = document.getElementById('winner');
+                winnerDiv.innerHTML = `<h2>Gefeliciteerd aan de Toernooi Kampioen: ${finalists[0]}!</h2>`;
+                winnerDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (losers.length === 2) {
+                knockoutMatches.push({ teamA: losers[0], teamB: losers[1], round: 'Third Place', completed: false });
+            }
+
+            if (knockoutMatches.length > 0) {
+                knockoutMatches.forEach((match, index) => {
+                    if (match.round === 'Final') {
+                        displayKnockoutMatches([match], 'final', 'displayWinner');
+                    } else if (match.round === 'Third Place') {
+                        displayKnockoutMatches([match], 'thirdPlace', null);
+                    }
+                });
+            }
         }
 
         function displayWinner() {
-            const winner = knockoutMatches[0].winner;
+            const winner = knockoutMatches.find(match => match.round === 'Final').winner;
             const winnerDiv = document.getElementById('winner');
             winnerDiv.innerHTML = `<h2>Gefeliciteerd aan de Toernooi Kampioen: ${winner}!</h2>`;
             winnerDiv.classList.remove('hidden');
