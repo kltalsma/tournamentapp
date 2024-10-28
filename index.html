@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Volleybal Toernooi Web App</title>
     <style>
         body {
@@ -43,11 +42,11 @@
     <div class="configuration">
         <h2>Configuratie</h2>
         <label for="numTeams">Aantal Teams:</label>
-        <input type="number" id="numTeams" min="2" max="20" value="3"><br>
+        <input type="number" id="numTeams" min="2" max="20" value="6"><br>
         <label for="numPoules">Aantal Poules:</label>
-        <input type="number" id="numPoules" min="1" max="5" value="1"><br>
-        <label for="numVelds">Aantal Velden:</label>
-        <input type="number" id="numCourts" min="1" max="5" value="1"><br>
+        <input type="number" id="numPoules" min="1" max="5" value="2"><br>
+        <label for="numCourts">Aantal Velden:</label>
+        <input type="number" id="numCourts" min="1" max="5" value="2"><br>
         <label for="matchTime">Tijd per Wedstrijd (minuten):</label>
         <input type="number" id="matchTime" min="10" max="60" value="40"><br><br>
         <button onclick="createSchedule()">Maak Schema</button>
@@ -62,16 +61,25 @@
         <div id="resultsTables"></div>
     </div>
 
-    <div class="real-time-info" id="liveInfo">
+    <div class="real-time-info hidden" id="liveInfo">
         <h2>Live Toernooi Informatie</h2>
         <div id="standingsTables"></div>
+    </div>
+
+    <div id="knockoutRounds" class="hidden">
+        <h2>Knockout Rounds</h2>
+        <div id="quarterfinals"></div>
+        <div id="semifinals"></div>
+        <div id="final"></div>
+        <div id="winner" class="hidden"></div>
     </div>
 
     <script>
         let teams = [];
         let matches = [];
         let poules = [];
-        let isKnockoutRoundsGenerated = false;
+        let knockoutMatches = [];
+        let matchId = 0; // Initialize match ID
 
         function createSchedule() {
             const numTeams = parseInt(document.getElementById('numTeams').value);
@@ -95,10 +103,12 @@
 
             // Generate pool matches
             matches = [];
+            matchId = 0; // Reset match ID
             poules.forEach((poule, pouleIndex) => {
                 for (let i = 0; i < poule.length; i++) {
                     for (let j = i + 1; j < poule.length; j++) {
                         matches.push({
+                            id: matchId++, // Assign unique ID
                             teamA: poule[i],
                             teamB: poule[j],
                             poule: `Poule ${pouleIndex + 1}`,
@@ -112,6 +122,9 @@
             displayPouleSchedules(numCourts, matchTime);
             displayResults();
             updateStandings();
+
+            // Ensure live info remains visible
+            document.getElementById('liveInfo').classList.remove('hidden');
         }
 
         function displayTeamNames() {
@@ -130,37 +143,36 @@
         }
 
         function updateTeamName(index) {
-    const newName = document.getElementById(`teamName${index}`).value;
-    const oldName = teams[index];
-    teams[index] = newName;
+            const newName = document.getElementById(`teamName${index}`).value;
+            const oldName = teams[index];
+            teams[index] = newName;
 
-    // Update team names in matches
-    matches.forEach(match => {
-        if (match.teamA === oldName) {
-            match.teamA = newName;
+            // Update team names in matches
+            matches.forEach(match => {
+                if (match.teamA === oldName) {
+                    match.teamA = newName;
+                }
+                if (match.teamB === oldName) {
+                    match.teamB = newName;
+                }
+            });
+
+            // Update team names in poules
+            poules.forEach(poule => {
+                for (let i = 0; i < poule.length; i++) {
+                    if (poule[i] === oldName) {
+                        poule[i] = newName;
+                    }
+                }
+            });
+
+            displayPouleSchedules(parseInt(document.getElementById('numCourts').value), parseInt(document.getElementById('matchTime').value));
+            displayResults();
+            updateStandings();
+
+            // Ensure live info remains visible
+            document.getElementById('liveInfo').classList.remove('hidden');
         }
-        if (match.teamB === oldName) {
-            match.teamB = newName;
-        }
-    });
-
-    // Update team names in poules
-    poules.forEach(poule => {
-        for (let i = 0; i < poule.length; i++) {
-            if (poule[i] === oldName) {
-                poule[i] = newName;
-            }
-        }
-    });
-
-    displayPouleSchedules(parseInt(document.getElementById('numCourts').value), parseInt(document.getElementById('matchTime').value));
-    displayResults();
-    updateStandings();
-
-    // Ensure live info remains visible
-    document.getElementById('liveInfo').classList.remove('hidden');
-}
-
 
         function displayPouleSchedules(numCourts, matchTime) {
             const pouleSchedules = document.getElementById('pouleSchedules');
@@ -237,17 +249,18 @@
                 resultsTables.appendChild(resultsTable);
 
                 const resultsBody = resultsTable.querySelector(`#resultsBodyPoule${index}`);
-                matches.filter(match => match.poule === `Poule ${index + 1}`).forEach((match, i) => {
+                const pouleMatches = matches.filter(match => match.poule === `Poule ${index + 1}`);
+                pouleMatches.forEach((match, i) => {
                     resultsBody.innerHTML += `
                         <tr>
                             <td>Match ${i + 1}</td>
                             <td>${match.teamA} vs ${match.teamB}</td>
                             <td>
-                                <input type="number" class="score-input" id="scoreA${match.teamA}_${match.teamB}" min="0" value="${match.scoreA}"> -
-                                <input type="number" class="score-input" id="scoreB${match.teamA}_${match.teamB}" min="0" value="${match.scoreB}">
-                                <button onclick="submitScore('${match.teamA}', '${match.teamB}')">Submit</button>
+                                <input type="number" class="score-input" id="scoreA${match.id}" min="0" value="${match.scoreA}"> -
+                                <input type="number" class="score-input" id="scoreB${match.id}" min="0" value="${match.scoreB}">
+                                <button onclick="submitScore(${match.id})">Submit</button>
                             </td>
-                            <td id="winner${match.teamA}_${match.teamB}"></td>
+                            <td id="winner${match.id}"></td>
                         </tr>
                     `;
                 });
@@ -256,10 +269,10 @@
             document.querySelector('.results').classList.remove('hidden');
         }
 
-        function submitScore(teamA, teamB) {
-            const scoreA = parseInt(document.getElementById(`scoreA${teamA}_${teamB}`).value) || 0;
-            const scoreB = parseInt(document.getElementById(`scoreB${teamA}_${teamB}`).value) || 0;
-            const match = matches.find(m => m.teamA === teamA && m.teamB === teamB);
+        function submitScore(matchId) {
+            const scoreA = parseInt(document.getElementById(`scoreA${matchId}`).value) || 0;
+            const scoreB = parseInt(document.getElementById(`scoreB${matchId}`).value) || 0;
+            const match = matches.find(m => m.id === matchId);
 
             match.scoreA = scoreA;
             match.scoreB = scoreB;
@@ -286,7 +299,7 @@
             matches.forEach((match) => {
                 const scoreA = match.scoreA;
                 const scoreB = match.scoreB;
-                const winnerCell = document.getElementById(`winner${match.teamA}_${match.teamB}`);
+                const winnerCell = document.getElementById(`winner${match.id}`);
 
                 standings[match.teamA].matchesPlayed++;
                 standings[match.teamB].matchesPlayed++;
@@ -296,8 +309,8 @@
                 standings[match.teamB].scoreAgainst += scoreA;
 
                 // Calculate sets won and lost
-                const setsA = scoreA > scoreB ? 2 : 0;
-                const setsB = scoreB > scoreA ? 2 : 0;
+                const setsA = scoreA > scoreB ? 2 : (scoreA === scoreB && scoreA > 0 ? 1 : 0);
+                const setsB = scoreB > scoreA ? 2 : (scoreA === scoreB && scoreA > 0 ? 1 : 0);
                 standings[match.teamA].setsWon += setsA;
                 standings[match.teamB].setsWon += setsB;
                 standings[match.teamA].setsLost += setsB;
@@ -381,18 +394,109 @@
 
         function updateResultsTable() {
             matches.forEach(match => {
-                const scoreA = parseInt(document.getElementById(`scoreA${match.teamA}_${match.teamB}`).value) || 0;
-                const scoreB = parseInt(document.getElementById(`scoreB${match.teamA}_${match.teamB}`).value) || 0;
+                const scoreA = parseInt(document.getElementById(`scoreA${match.id}`).value) || 0;
+                const scoreB = parseInt(document.getElementById(`scoreB${match.id}`).value) || 0;
                 match.scoreA = scoreA;
                 match.scoreB = scoreB;
-                const winnerCell = document.getElementById(`winner${match.teamA}_${match.teamB}`);
+                const winnerCell = document.getElementById(`winner${match.id}`);
 
                 // Update winner information based on current scores
-                winnerCell.textContent = scoreA > scoreB ? match.teamA : (scoreB > scoreA ? match.teamB : "Gelijkspel");
+                if (scoreA > scoreB) {
+                    winnerCell.textContent = match.teamA;
+                } else if (scoreB > scoreA) {
+                    winnerCell.textContent = match.teamB;
+                } else if (scoreA === scoreB && scoreA > 0) {
+                    winnerCell.textContent = 'Gelijkspel';
+                } else {
+                    winnerCell.textContent = '';
+                }
             });
             updateStandings();
+        }
+
+        // Knockout Rounds Implementation
+        function getAdvancingTeams() {
+            const advancingTeams = [];
+            poules.forEach(poule => {
+                const sortedTeams = poule.sort((a, b) => standings[b].points - standings[a].points || standings[b].setRatio - standings[a].setRatio);
+                advancingTeams.push(sortedTeams[0], sortedTeams[1]); // Top 2 teams from each pool
+            });
+            return advancingTeams;
+        }
+
+        function generateQuarterfinals() {
+            const advancingTeams = getAdvancingTeams();
+            knockoutMatches = [
+                { teamA: advancingTeams[0], teamB: advancingTeams[3], round: 'Quarterfinal' },
+                { teamA: advancingTeams[1], teamB: advancingTeams[2], round: 'Quarterfinal' }
+            ];
+            displayKnockoutMatches(knockoutMatches, 'quarterfinals', generateSemifinals);
+        }
+
+        function displayKnockoutMatches(matches, stageId, nextRoundCallback) {
+            const stageDiv = document.getElementById(stageId);
+            stageDiv.innerHTML = ''; // Clear previous content
+            matches.forEach((match, index) => {
+                stageDiv.innerHTML += `
+                    <div>
+                        <h3>${match.round} Match ${index + 1}: ${match.teamA} vs ${match.teamB}</h3>
+                        <input type="number" id="scoreA_${stageId}_${index}" placeholder="Score ${match.teamA}">
+                        <input type="number" id="scoreB_${stageId}_${index}" placeholder="Score ${match.teamB}">
+                        <button onclick="submitKnockoutScore('${stageId}', ${index}, ${nextRoundCallback ? 'nextRoundCallback' : 'null'})">Submit</button>
+                        <div id="winner_${stageId}_${index}"></div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('knockoutRounds').classList.remove('hidden');
+        }
+
+        function submitKnockoutScore(stageId, matchIndex, nextRoundCallback) {
+            const scoreA = parseInt(document.getElementById(`scoreA_${stageId}_${matchIndex}`).value) || 0;
+            const scoreB = parseInt(document.getElementById(`scoreB_${stageId}_${matchIndex}`).value) || 0;
+            const winnerDiv = document.getElementById(`winner_${stageId}_${matchIndex}`);
+            
+            let winner;
+            if (scoreA > scoreB) {
+                winner = knockoutMatches[matchIndex].teamA;
+            } else if (scoreB > scoreA) {
+                winner = knockoutMatches[matchIndex].teamB;
+            } else {
+                alert('Tie matches are not allowed in knockout rounds. Please enter a valid score.');
+                return;
+            }
+            
+            winnerDiv.innerText = `Winner: ${winner}`;
+            knockoutMatches[matchIndex].winner = winner;
+
+            // Check if all matches in the round are completed
+            if (knockoutMatches.every(match => match.winner)) {
+                nextRoundCallback();
+            }
+        }
+
+        function generateSemifinals() {
+            const semifinalists = knockoutMatches.map(match => match.winner);
+            knockoutMatches = [
+                { teamA: semifinalists[0], teamB: semifinalists[1], round: 'Semifinal' }
+            ];
+            displayKnockoutMatches(knockoutMatches, 'semifinals', generateFinal);
+        }
+
+        function generateFinal() {
+            const finalists = knockoutMatches.map(match => match.winner);
+            knockoutMatches = [
+                { teamA: finalists[0], teamB: finalists[1], round: 'Final' }
+            ];
+            displayKnockoutMatches(knockoutMatches, 'final', displayWinner);
+        }
+
+        function displayWinner() {
+            const winner = knockoutMatches[0].winner;
+            const winnerDiv = document.getElementById('winner');
+            winnerDiv.innerHTML = `<h2>Congratulations to the Tournament Champion: ${winner}!</h2>`;
+            winnerDiv.classList.remove('hidden');
         }
     </script>
 </body>
 </html>
-```
