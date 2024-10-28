@@ -432,10 +432,14 @@
 
         function generateQuarterfinals() {
             const advancingTeams = getAdvancingTeams();
-            knockoutMatches = [
-                { teamA: advancingTeams[0], teamB: advancingTeams[3], round: 'Quarterfinal' },
-                { teamA: advancingTeams[1], teamB: advancingTeams[2], round: 'Quarterfinal' }
-            ];
+            knockoutMatches = [];
+            for (let i = 0; i < advancingTeams.length; i += 2) {
+                knockoutMatches.push({
+                    teamA: advancingTeams[i],
+                    teamB: advancingTeams[i + 1],
+                    round: 'Quarterfinal'
+                });
+            }
             displayKnockoutMatches(knockoutMatches, 'quarterfinals', generateSemifinals);
         }
 
@@ -486,9 +490,14 @@
 
         function generateSemifinals() {
             const semifinalists = knockoutMatches.map(match => match.winner);
-            knockoutMatches = [
-                { teamA: semifinalists[0], teamB: semifinalists[1], round: 'Semifinal' }
-            ];
+            knockoutMatches = [];
+            for (let i = 0; i < semifinalists.length; i += 2) {
+                knockoutMatches.push({
+                    teamA: semifinalists[i],
+                    teamB: semifinalists[i + 1],
+                    round: 'Semifinal'
+                });
+            }
             displayKnockoutMatches(knockoutMatches, 'semifinals', generateFinal);
         }
 
