@@ -70,6 +70,7 @@
         <h2>Knockout Rounds</h2>
         <div id="quarterfinals"></div>
         <div id="semifinals"></div>
+        <div id="thirdPlace"></div>
         <div id="final"></div>
         <div id="winner" class="hidden"></div>
     </div>
@@ -498,15 +499,18 @@
                     round: 'Semifinal'
                 });
             }
-            displayKnockoutMatches(knock    outMatches, 'semifinals', generateFinal);
+            displayKnockoutMatches(knockoutMatches, 'semifinals', generateFinalAndThirdPlace);
         }
 
-        function generateFinal() {
+        function generateFinalAndThirdPlace() {
             const finalists = knockoutMatches.map(match => match.winner);
+            const losers = knockoutMatches.filter(match => !finalists.includes(match.teamA) || !finalists.includes(match.teamB)).map(match => match.winner === match.teamA ? match.teamB : match.teamA);
             knockoutMatches = [
-                { teamA: finalists[0], teamB: finalists[1], round: 'Final' }
+                { teamA: finalists[0], teamB: finalists[1], round: 'Final' },
+                { teamA: losers[0], teamB: losers[1], round: 'Third Place' }
             ];
-            displayKnockoutMatches(knockoutMatches, 'final', displayWinner);
+            displayKnockoutMatches(knockoutMatches.slice(0, 1), 'final', displayWinner);
+            displayKnockoutMatches(knockoutMatches.slice(1, 2), 'thirdPlace', null);
         }
 
         function displayWinner() {
